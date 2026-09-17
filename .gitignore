@@ -1,0 +1,73 @@
+# ---------------------------------------------------------------------------
+# Supplied assignment material.
+# Provided by the company (~90 MB of binaries) and must not be modified.
+# The task brief itself is restated in README.md, so these stay local only.
+# ---------------------------------------------------------------------------
+data/
+paper/
+README_Task.md
+DATA.md
+
+# ---------------------------------------------------------------------------
+# Working notes: planning docs, reading notes, figure drafts. Local only.
+# ---------------------------------------------------------------------------
+think/
+
+# ---------------------------------------------------------------------------
+# Derived artifacts: cached activations, probes, steering objects, figures.
+# Regenerable from code + supplied data, so they stay out of history.
+# ---------------------------------------------------------------------------
+artifacts/
+outputs/
+results/
+features/
+checkpoints/
+figures/
+logs/
+*.pt
+*.pth
+*.ckpt
+*.safetensors
+*.npy
+*.npz
+*.h5
+*.parquet
+*.feather
+
+# ---------------------------------------------------------------------------
+# Model and dataset caches
+# ---------------------------------------------------------------------------
+.cache/
+hf_cache/
+.huggingface/
+torch_hub/
+
+# ---------------------------------------------------------------------------
+# Python environments and tooling
+# ---------------------------------------------------------------------------
+.venv/
+venv/
+env/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.ipynb_checkpoints/
+
+# ---------------------------------------------------------------------------
+# Editors and OS
+# ---------------------------------------------------------------------------
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ---------------------------------------------------------------------------
+# Scratch
+# ---------------------------------------------------------------------------
+scratch/
+tmp/
+*.tmp
