@@ -77,10 +77,46 @@ are never modified, and all derived artifacts are written outside `data/`.
 ## Repository
 
 ```
-src/          extraction, probing, nullspace, steering, manifolds
-artifacts/    cached activations, probes, figures        (not tracked)
-data/         supplied videos and metadata               (not tracked)
+config.yaml              every path and hyperparameter, in one place
+src/vjepa_physics/
+  video.py               mp4 -> RGB uint8 frames (torchcodec or OpenCV)
+  data.py                manifest + metadata -> one records table
+  encoder.py             frozen V-JEPA 2: preprocess, forward, mean-pool
+  extract.py             cache pooled features for a whole dataset (resumable)
+  features.py            load cached features; paper layer l == hidden_states[l+1]
+  folds.py               5-fold cross-validation grouped by label value
+  probes.py              linear probes and the 20-config Adam sweep
+  plots.py               figures
+scripts/
+  00_sanity.py           smoke test before a full run
+  01_extract.py          extraction (needs the encoder; GPU recommended)
+  02_layerwise_probe.py  Part 1.1 layer-wise probing (CPU is fine)
+tests/                   decode, data, folds and probe correctness
+artifacts/               features, splits, results, figures   (not tracked)
+data/                    supplied videos and metadata          (not tracked)
 ```
+
+---
+
+## Running it
+
+```bash
+pip install -r requirements.txt     # or: pip install -e .
+python -m pytest -q                 # decode, data, fold and probe checks
+
+python scripts/00_sanity.py         # 4 checks incl. a viability probe; exits non-zero on failure
+python scripts/01_extract.py --dataset speed               # -> artifacts/features/speed
+python scripts/02_layerwise_probe.py --variable speed      # -> artifacts/results/speed
+```
+
+Extraction is the only step that needs the encoder: roughly 10 s per clip on a
+4-core CPU, a few minutes for the whole speed dataset on a T4. It resumes if
+interrupted. Probing reads the cached features and runs in minutes on CPU; add
+`--device cuda` to run it on a GPU instead.
+
+`01_extract.py` and `02_layerwise_probe.py` accept `--limit N` to work on a
+seeded random subset of N clips, written to its own directory (`speed_nN`) so a
+debug run is never mistaken for the full one.
 
 ---
 
@@ -93,5 +129,5 @@ comparisons, and limitations, serving as the basis for an open discussion.
 
 ## Status
 
-Planning complete; implementation in progress. Results and usage instructions
-will be added here as experiments land.
+Part 1.1 (layer-wise probing) is implemented for speed and verified on CPU.
+Full-dataset extraction and results are pending.

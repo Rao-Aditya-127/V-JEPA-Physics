@@ -1,0 +1,16 @@
+# Versions pinned where they affect numerics; the rest are lower bounds.
+# Tested locally with torch 2.8.0 and transformers 5.4.0.
+torch>=2.3
+transformers==5.4.0
+numpy>=1.26,<2.3
+pandas>=2.0
+scikit-learn>=1.4
+matplotlib>=3.8
+opencv-python-headless>=4.8
+pyyaml>=6.0
+tqdm>=4.66
+pytest>=8.0
+
+# Optional. Preferred decoder when present, but needs FFmpeg shared libraries and
+# a build matching your torch version. The pipeline falls back to OpenCV.
+# torchcodec

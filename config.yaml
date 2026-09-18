@@ -1,0 +1,45 @@
+# Single source of truth for paths and hyperparameters.
+# Paths are relative to the repository root.
+#
+# Paper references are to Joseph et al., "Interpreting Physics in Video World
+# Models" (arXiv:2602.07050). U*/D* codes refer to the fidelity audit in
+# think/01-SPEED-TASK.md §4.
+
+paths:
+  data_root: data
+  artifacts: artifacts
+
+model:
+  id: facebook/vjepa2-vitl-fpc64-256
+  num_layers: 24            # paper layers 0..23  ==  hidden_states[1..24]
+
+preprocessing:
+  num_frames: 16
+  frame_size: 256
+  # D1: clips are already 256x256. The processor's default resize->292 then
+  # center-crop->256 would discard ~16 px per edge, clipping the disk in ~5% of
+  # clips. Keep its normalisation only.
+  do_resize: false
+  do_center_crop: false
+  decoder: auto             # auto | torchcodec | opencv  (auto prefers torchcodec)
+
+extraction:
+  batch_size: 8
+  autocast_dtype: float16   # CUDA only. T4 (Turing) has fp16 tensor cores, no bf16.
+  decode_workers: 4
+  pixel_baseline_size: 16   # [OURS] frames -> 16x16 grayscale -> 16*256 = 4096 dims
+
+variables:
+  speed:
+    dataset: speed
+    target: speed_mps
+    epochs: 50              # C.11: 50 epochs for speed
+
+probing:
+  n_folds: 5                # Appendix B: 5-fold grouped cross-validation
+  inner_val_every: 5        # U3: every 5th training group -> inner validation (20%)
+  seed: 0
+  batch_size: 32            # U6: unstated in the paper
+  learning_rates: [1.0e-4, 3.0e-4, 1.0e-3, 3.0e-3, 5.0e-3]   # Appendix B
+  weight_decays: [0.01, 0.1, 0.4, 0.8]                        # Appendix B
+  device: cpu
