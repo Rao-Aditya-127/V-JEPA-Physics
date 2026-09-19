@@ -91,6 +91,7 @@ scripts/
   00_sanity.py           smoke test before a full run
   01_extract.py          extraction (needs the encoder; GPU recommended)
   02_layerwise_probe.py  Part 1.1 layer-wise probing (CPU is fine)
+  03_polar_figure.py     Part 1.1 combined figure: all three variables, like the paper's Fig. 2c
 tests/                   decode, data, folds and probe correctness
 artifacts/               features, splits, results, figures   (not tracked)
 data/                    supplied videos and metadata          (not tracked)
@@ -107,6 +108,7 @@ python -m pytest -q                 # decode, data, fold and probe checks
 python scripts/00_sanity.py         # 4 checks incl. a viability probe; exits non-zero on failure
 python scripts/01_extract.py --dataset speed               # -> artifacts/features/speed
 python scripts/02_layerwise_probe.py --variable speed      # -> artifacts/results/speed
+python scripts/03_polar_figure.py                          # once all three variables are probed
 ```
 
 Extraction is the only step that needs the encoder: roughly 10 s per clip on a

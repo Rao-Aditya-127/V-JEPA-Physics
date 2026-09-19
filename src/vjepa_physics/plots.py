@@ -7,6 +7,7 @@ series colours, recessive grid and axes, one y-axis per chart.
     Figure 1  layerwise.png   the reproduction curve (paper Fig. 2c, one variable)
     Figure 2  controls.png    [OURS] the same curve against its controls
     Figure 3  error_by_value.png  [OURS] held-out error vs. true label value
+    Fig. 2c   fig2c_polar.png  all three variables on one axis, styled after the paper
 """
 
 from __future__ import annotations
@@ -23,6 +24,7 @@ import pandas as pd  # noqa: E402
 SURFACE, INK, INK_2, MUTED = "#fcfcfb", "#0b0b0b", "#52514e", "#898781"
 GRID, AXIS = "#e1e0d9", "#c3c2b7"
 BLUE, ORANGE, AQUA = "#2a78d6", "#eb6834", "#1baf7a"            # categorical slots 1-3
+RED = "#e34948"                                                  # categorical slot 8
 ORDINAL_BLUES = ["#86b6ef", "#3987e5", "#1c5cab", "#0d366b"]      # ramp steps 250/400/550/700
 
 PAPER_LAYER = 8                                                  # the paper's emergence-zone marker
@@ -146,4 +148,55 @@ def error_by_value_figure(y: np.ndarray, oof: dict[int, np.ndarray], path: Path,
     legend = ax.legend(frameon=False, fontsize=8, labelcolor=INK_2, title="paper layer",
                        title_fontsize=8, loc="upper left", bbox_to_anchor=(1.01, 1.0))
     legend.get_title().set_color(INK_2)
+    return _save(fig, path)
+
+
+# Styled after the paper's Figure 2c so the two can be compared side by side:
+# the same colour per variable, thick lines, ±1 std bands, a dashed layer-8 line in
+# the legend, a boxed legend, a full frame and 0-1 axes. Two deliberate differences:
+# the y-label says "Held-out" (our scores come from test folds never used for model
+# selection), and staggered markers let colour-blind readers tell the lines apart
+# (red and teal are close under deuteranopia; the palette validator flags ΔE 6.9).
+POLAR_STYLE = {                       # variable -> (colour, marker, legend label)
+    "speed": (BLUE, "o", "Speed"),
+    "direction": (RED, "^", "Direction"),
+    "acceleration": (AQUA, "s", "Acceleration"),
+}
+
+
+def polar_figure(summaries: dict[str, pd.DataFrame], path: Path, num_layers: int = 24,
+                 ylim: tuple[float, float] = (0.0, 1.05),
+                 yticks: tuple[float, ...] = (0.0, 0.2, 0.4, 0.6, 0.8, 1.0),
+                 title: str = "V-JEPA 2-L: Polar") -> Path:
+    """The reproduction of the paper's Figure 2c: every variable's layer-wise curve.
+
+    `summaries` maps a variable name to its summary.csv, main condition only. The
+    defaults give the paper's full 0-1 scale; a narrower `ylim` gives a zoomed view,
+    and its `title` should then say so, since the axis no longer starts at zero.
+    """
+    fig, ax = plt.subplots(figsize=(6.4, 4.3), dpi=150)
+    for offset, (variable, (color, marker, label)) in enumerate(POLAR_STYLE.items()):
+        frame = summaries[variable].sort_values("layer_fraction")
+        x, mean, std = frame.layer_fraction, frame.r2_mean, frame.r2_std.fillna(0)
+        ax.fill_between(x, mean - std, mean + std, color=color, alpha=0.2, linewidth=0)
+        ax.plot(x, mean, color=color, linewidth=2.5, marker=marker, markersize=5.5,
+                markevery=(offset, 3), label=label)            # staggered: markers never coincide
+    ax.axvline(PAPER_LAYER / (num_layers - 1), color="#9a9a9a", linestyle="--", linewidth=1.3,
+               label=f"Layer {PAPER_LAYER}")
+
+    ax.set_xlim(-0.02, 1.02)
+    ax.set_ylim(*ylim)
+    ax.set_xticks([0.0, 0.2, 0.4, 0.6, 0.8, 1.0])
+    ax.set_yticks(list(yticks))
+    ax.grid(True, color=GRID, linewidth=0.7)
+    ax.set_axisbelow(True)
+    for spine in ax.spines.values():
+        spine.set_color(INK_2)
+    ax.tick_params(colors=INK_2, labelcolor=INK)
+    ax.set_xlabel("Layer Fraction", color=INK, fontsize=12, fontweight="bold")
+    ax.set_ylabel("Held-out R²", color=INK, fontsize=12, fontweight="bold")
+    ax.set_title(title, color=INK, fontsize=13, fontweight="bold")
+    ax.legend(loc="lower right", frameon=True, fontsize=10, labelcolor=INK)
+    fig.set_facecolor(SURFACE)
+    ax.set_facecolor(SURFACE)
     return _save(fig, path)
