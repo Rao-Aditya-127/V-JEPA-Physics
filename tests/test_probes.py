@@ -1,7 +1,7 @@
 import numpy as np
 import torch
 
-from vjepa_physics.probes import fit_probe, mae, r2_score, standardize, sweep
+from vjepa_physics.probes import circular_mae, fit_probe, mae, r2_score, sincos, standardize, sweep
 
 
 def planted(n=400, d=64, noise=0.1, seed=0):
@@ -72,3 +72,23 @@ def test_selection_uses_validation_not_test():
     result = sweep(Xf, yf, Xv, yv, Xt, yt, learning_rates=[1e-4, 3e-3],
                    weight_decays=[0.01], epochs=5)
     assert result.best == int(np.argmax(result.val_r2))
+
+
+def test_sincos_roundtrip():
+    theta = np.array([0.0, 90.0, 180.0, 270.0, 359.0])
+    s = sincos(theta)
+    assert s.shape == (5, 2)
+    assert np.allclose(s[1], [1.0, 0.0]) and np.allclose(s[2], [0.0, -1.0])   # (sin, cos) order
+    assert circular_mae(theta, s) < 1e-9                                       # exact prediction
+
+
+def test_circular_mae_measures_the_short_way_round():
+    assert np.isclose(circular_mae(np.array([359.0]), sincos(np.array([1.0]))), 2.0)
+    assert np.isclose(circular_mae(np.array([10.0]), sincos(np.array([190.0]))), 180.0)
+    assert np.isclose(circular_mae(np.array([0.0]), 5 * sincos(np.array([30.0]))), 30.0)  # length ignored
+
+
+def test_circular_mae_chance_is_90_degrees():
+    rng = np.random.default_rng(0)
+    truth, guess = rng.uniform(0, 360, 20000), rng.uniform(0, 360, 20000)
+    assert abs(circular_mae(truth, sincos(guess)) - 90.0) < 1.5

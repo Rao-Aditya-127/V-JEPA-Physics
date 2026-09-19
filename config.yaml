@@ -38,6 +38,11 @@ variables:
     dataset: acceleration
     target: acceleration_mps2   # identical to the `magnitude` column
     epochs: 50              # C.11 is silent on acceleration; speed's 50, confirmed by the convergence check
+  direction:
+    dataset: direction
+    target: theta_degrees
+    circular: true          # probe predicts (sin, cos); error reported as circular MAE in degrees
+    epochs: 100             # C.11: 100 epochs for direction
 
 probing:
   n_folds: 5                # Appendix B: 5-fold grouped cross-validation

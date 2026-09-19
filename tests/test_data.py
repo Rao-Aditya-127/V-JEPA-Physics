@@ -1,6 +1,7 @@
 from pathlib import Path
 
-from conftest import ACCELERATION_DIR, SPEED_DIR, needs_acceleration_data, needs_data
+from conftest import (ACCELERATION_DIR, DIRECTION_DIR, SPEED_DIR, needs_acceleration_data,
+                      needs_data, needs_direction_data)
 from vjepa_physics.data import load_records, subset
 
 
@@ -35,3 +36,14 @@ def test_acceleration_records():
     assert (records.groupby("acceleration_mps2").theta_degrees.nunique() == 24).all()
     assert (records.speed_mps == 0).all()                          # every clip starts from rest
     assert (records.magnitude == records.acceleration_mps2).all()  # the two label columns agree
+
+
+@needs_direction_data
+def test_direction_records():
+    records = load_records(DIRECTION_DIR)
+    assert len(records) == 1500
+    assert records.clip_id.is_unique and records.clip_id.is_monotonic_increasing
+    assert records.theta_degrees.nunique() == 64
+    assert set(records.motion) == {"velocity", "acceleration"}
+    assert (records.groupby("theta_degrees").motion.nunique() == 2).all()     # both motions at every angle
+    assert ((records.speed_mps > 0) | (records.acceleration_mps2 > 0)).all()  # no static clips

@@ -12,6 +12,9 @@ held-out fold. By default only that runs:
 plus a convergence check (U6): does doubling the epochs change the answer? That
 check is part of doing the core correctly, not an extra experiment.
 
+For direction the probe predicts (sin θ, cos θ) (paper C.11), folds are grouped by
+the angle, and circular error in degrees is reported alongside R².
+
 Additional checks beyond the brief are opt-in, e.g.
 `--conditions main embedding random_cv shuffled pixels`:
 
@@ -42,7 +45,7 @@ from vjepa_physics.config import features_dir, load_config
 from vjepa_physics.features import layer_fraction, load_features
 from vjepa_physics.folds import check_folds, grouped_folds, random_folds, save_folds
 from vjepa_physics.plots import controls_figure, error_by_value_figure, layerwise_figure
-from vjepa_physics.probes import standardize, sweep
+from vjepa_physics.probes import circular_mae, sincos, standardize, sweep
 
 UNITS = {"speed": "m/s", "acceleration": "m/s²"}
 CORE = ("main",)
@@ -51,14 +54,19 @@ CONDITIONS = CORE + EXTRAS
 
 
 def evaluate(features: dict, y: np.ndarray, folds, probing: dict, epochs: int, device: str,
-             condition: str, num_layers: int, per_feature: bool = True):
+             condition: str, num_layers: int, per_feature: bool = True,
+             angles: np.ndarray | None = None):
     """Run the sweep for every feature set x fold. Returns per-fold rows and
-    out-of-fold predictions (each clip predicted by the fold that held it out)."""
+    out-of-fold predictions (each clip predicted by the fold that held it out).
+
+    y is (n,) for a scalar target, or (n, 2) = (sin, cos) for direction. For
+    direction, pass the true angles in degrees to also report circular error.
+    """
     rows, oof = [], {}
     lrs, wds = probing["learning_rates"], probing["weight_decays"]
     for layer, X in features.items():
         started = time.time()
-        pred = np.full(len(y), np.nan)
+        pred = np.full(y.shape, np.nan)                  # keeps both columns for direction
         for k, fold in enumerate(folds):
             Xf, Xv, Xt = standardize(X[fold.fit], X[fold.val], X[fold.test], per_feature=per_feature)
             result = sweep(Xf, y[fold.fit], Xv, y[fold.val], Xt, y[fold.test],
@@ -66,20 +74,27 @@ def evaluate(features: dict, y: np.ndarray, folds, probing: dict, epochs: int, d
                            batch_size=probing["batch_size"], seed=probing["seed"], device=device)
             best = result.best
             lr, wd = result.configs[best]
-            pred[fold.test] = result.test_pred[best][:, 0]
-            rows.append({
+            best_pred = result.test_pred[best]            # (n_test, d_out)
+            pred[fold.test] = best_pred[:, 0] if y.ndim == 1 else best_pred
+            row = {
                 "condition": condition, "layer": layer,
                 "layer_fraction": layer_fraction(layer, num_layers) if layer is not None else np.nan,
                 "fold": k, "lr": lr, "wd": wd, "lr_at_grid_edge": lr in (min(lrs), max(lrs)),
                 "val_r2": float(result.val_r2[best]), "test_r2": float(result.test_r2[best]),
                 "test_mae": float(result.test_mae[best]),
                 "n_fit": len(fold.fit), "n_val": len(fold.val), "n_test": len(fold.test),
-            })
+            }
+            if angles is not None:
+                row["test_circ_mae"] = circular_mae(angles[fold.test], best_pred)
+            rows.append(row)
         oof[layer] = pred
-        r2 = [r["test_r2"] for r in rows if r["layer"] == layer and r["condition"] == condition]
+        mine = [r for r in rows if r["layer"] == layer and r["condition"] == condition]
+        r2 = [r["test_r2"] for r in mine]
         name = "pixels" if layer is None else ("embedding" if layer == -1 else f"layer {layer:2d}")
+        extra = (f"   circular error {np.mean([r['test_circ_mae'] for r in mine]):5.1f} deg"
+                 if angles is not None else "")
         print(f"  {condition:9s} {name:10s}  R2 = {np.mean(r2):6.3f} +/- {np.std(r2, ddof=1):.3f}"
-              f"   ({time.time() - started:4.1f} s)")
+              f"{extra}   ({time.time() - started:4.1f} s)")
     return rows, oof
 
 
@@ -105,7 +120,7 @@ def convergence_check(pooled_layer, y, fold, probing, epochs, device, layers):
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--variable", default="speed", choices=["speed", "acceleration"])
+    parser.add_argument("--variable", default="speed", choices=["speed", "acceleration", "direction"])
     parser.add_argument("--limit", type=int, default=None, help="use features from a --limit extraction")
     parser.add_argument("--conditions", nargs="+", default=list(CORE), choices=CONDITIONS,
                         help="default: main only. Extras: " + ", ".join(EXTRAS))
@@ -120,23 +135,32 @@ def main() -> None:
     var_cfg, probing = cfg["variables"][args.variable], cfg["probing"]
     device = args.device or probing["device"]
     epochs = var_cfg["epochs"]
+    circular = var_cfg.get("circular", False)
+    if circular and set(args.conditions) - set(CORE):
+        parser.error("the extra conditions assume a single-number target; "
+                     "they are not supported for direction yet")
 
     feat_dir = features_dir(cfg, var_cfg["dataset"], args.limit)
     feats = load_features(feat_dir)
-    y = feats.labels[var_cfg["target"]].to_numpy(dtype=np.float64)
+    # `label` is what folds group by (speed value, or angle in degrees). `y` is what the
+    # probe predicts: the label itself, or (sin, cos) of the angle for direction.
+    label = feats.labels[var_cfg["target"]].to_numpy(dtype=np.float64)
+    y = sincos(label) if circular else label
+    angles = label if circular else None
     clip_ids = feats.labels.clip_id.to_numpy()
     L = feats.num_layers
     out_dir = cfg["paths"]["artifacts"] / "results" / feat_dir.name
     (out_dir / "figures").mkdir(parents=True, exist_ok=True)
     splits_dir = cfg["paths"]["artifacts"] / "splits"
-    print(f"{feat_dir.name}: {len(y)} clips, {len(np.unique(y))} distinct {var_cfg['target']} values, "
-          f"{L} layers, device={device}, epochs={epochs}")
+    target_desc = f"(sin, cos) of {var_cfg['target']}" if circular else var_cfg["target"]
+    print(f"{feat_dir.name}: {len(label)} clips, {len(np.unique(label))} distinct {var_cfg['target']} values, "
+          f"target {target_desc}, {L} layers, device={device}, epochs={epochs}")
 
-    # Folds -- built once, checked, written to disk.
-    grouped = grouped_folds(y, probing["n_folds"], probing["inner_val_every"])
-    check_folds(grouped, len(y), y)
+    # Folds -- built once, checked, written to disk. Always grouped by the label value.
+    grouped = grouped_folds(label, probing["n_folds"], probing["inner_val_every"])
+    check_folds(grouped, len(label), label)
     save_folds(grouped, clip_ids, splits_dir / f"{feat_dir.name}_grouped.json", "grouped by label value")
-    ungrouped = random_folds(len(y), probing["n_folds"], seed=probing["seed"])
+    ungrouped = random_folds(len(label), probing["n_folds"], seed=probing["seed"])
     check_folds(ungrouped, len(y))
     save_folds(ungrouped, clip_ids, splits_dir / f"{feat_dir.name}_random.json", "random over clips")
 
@@ -148,7 +172,7 @@ def main() -> None:
     if "main" in args.conditions:
         print("\nmain: paper layers 0..23, grouped CV")
         r, oof_main = evaluate({l: feats.layer(l) for l in all_layers}, y, grouped, probing,
-                               epochs, device, "main", L)
+                               epochs, device, "main", L, angles=angles)
         rows += r
     if "embedding" in args.conditions:
         print("\nembedding [OURS]: patch embedding before block 0, grouped CV")
@@ -182,11 +206,13 @@ def main() -> None:
             print(f"\nkeeping earlier results for: {sorted(kept.condition.unique())}")
         per_fold = pd.concat([kept, per_fold], ignore_index=True)
     per_fold.to_csv(per_fold_path, index=False)
+    aggregates = dict(r2_mean=("test_r2", "mean"), r2_std=("test_r2", "std"),
+                      mae_mean=("test_mae", "mean"), mae_std=("test_mae", "std"))
+    if "test_circ_mae" in per_fold:                   # direction: error in degrees
+        aggregates.update(circ_mae_mean=("test_circ_mae", "mean"), circ_mae_std=("test_circ_mae", "std"))
+    aggregates.update(n_folds=("fold", "count"), lr_edge_picks=("lr_at_grid_edge", "sum"))
     summary = (per_fold.groupby(["condition", "layer", "layer_fraction"], dropna=False)
-               .agg(r2_mean=("test_r2", "mean"), r2_std=("test_r2", "std"),
-                    mae_mean=("test_mae", "mean"), mae_std=("test_mae", "std"),
-                    n_folds=("fold", "count"), lr_edge_picks=("lr_at_grid_edge", "sum"))
-               .reset_index())
+               .agg(**aggregates).reset_index())
     summary.to_csv(out_dir / "summary.csv", index=False)
 
     convergence = None
@@ -198,8 +224,8 @@ def main() -> None:
 
     figures = out_dir / "figures"
     oof_path = out_dir / "oof_main.npz"
-    if oof_main:
-        np.savez(oof_path, y=y, clip_id=clip_ids,
+    if oof_main:   # predictions: (layers, clips) for scalars, (layers, clips, 2) for direction
+        np.savez(oof_path, y=y, label=label, clip_id=clip_ids,
                  layers=np.array(list(oof_main)), predictions=np.stack(list(oof_main.values())))
     extras_present = summary.condition.isin(EXTRAS).any()
     if (summary.condition == "main").any():
@@ -213,7 +239,8 @@ def main() -> None:
 
     edge = int(per_fold.lr_at_grid_edge.sum())
     run = {"features": str(feat_dir), "features_meta": feats.meta, "variable": args.variable,
-           "target": var_cfg["target"], "epochs": epochs, "probing": probing,
+           "target": var_cfg["target"], "probe_target": target_desc, "circular": circular,
+           "epochs": epochs, "probing": probing,
            "conditions_in_results": sorted(per_fold.condition.unique()),
            "conditions_this_run": args.conditions, "control_stride": args.control_stride,
            "n_clips": int(len(y)), "minutes": round((time.time() - started) / 60, 2),

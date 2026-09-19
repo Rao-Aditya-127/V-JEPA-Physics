@@ -66,6 +66,27 @@ def mae(y: np.ndarray, pred: np.ndarray) -> np.ndarray:
     return np.abs(pred - y).mean(axis=(-2, -1))
 
 
+def sincos(theta_degrees: np.ndarray) -> np.ndarray:
+    """Direction as a probe target, (sin θ, cos θ) -> shape (n, 2).
+
+    The paper's circular regression (C.11). Regressing the angle itself would be
+    wrong: 359° and 1° are 2° apart but 358 apart as numbers.
+    """
+    radians = np.radians(np.asarray(theta_degrees, dtype=np.float64))
+    return np.stack([np.sin(radians), np.cos(radians)], axis=1)
+
+
+def circular_mae(theta_degrees: np.ndarray, pred_sincos: np.ndarray) -> float:
+    """Mean angular error in degrees, measured the short way round the circle.
+
+    The predicted (sin, cos) pair is turned back into an angle with atan2, so only
+    its direction matters, not its length. Perfect is 0°; chance is 90°.
+    """
+    pred = np.degrees(np.arctan2(pred_sincos[:, 0], pred_sincos[:, 1]))
+    error = (pred - np.asarray(theta_degrees) + 180.0) % 360.0 - 180.0   # wrapped to [-180, 180)
+    return float(np.abs(error).mean())
+
+
 def _as_2d(y: np.ndarray) -> np.ndarray:
     return y.reshape(len(y), -1).astype(np.float32)
 
