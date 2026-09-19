@@ -115,7 +115,7 @@ def controls_figure(summary: pd.DataFrame, path: Path, variable: str, num_layers
         ax.axhline(mean, color=AQUA, linewidth=2, linestyle=(0, (6, 3)), label="raw pixels", zorder=2)
         lows.append(pd.Series([mean - std]))
 
-    embedding = summary[(summary.condition == "main") & (summary.layer == -1)]
+    embedding = summary[summary.condition == "embedding"]
     if len(embedding):
         x = -1 / (num_layers - 1)
         ax.errorbar(x, embedding.r2_mean, yerr=embedding.r2_std, fmt="D", color=BLUE,

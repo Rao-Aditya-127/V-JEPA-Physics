@@ -114,6 +114,11 @@ Extraction is the only step that needs the encoder: roughly 10 s per clip on a
 interrupted. Probing reads the cached features and runs in minutes on CPU; add
 `--device cuda` to run it on a GPU instead.
 
+By default, probing runs exactly the experiment the brief asks for. Additional
+checks beyond it (controls, the patch embedding) are opt-in, with
+`--conditions embedding random_cv shuffled pixels`; they are added to an existing
+run's results rather than replacing them.
+
 `01_extract.py` and `02_layerwise_probe.py` accept `--limit N` to work on a
 seeded random subset of N clips, written to its own directory (`speed_nN`) so a
 debug run is never mistaken for the full one.

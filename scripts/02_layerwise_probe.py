@@ -1,18 +1,26 @@
 """Part 1.1: layer-wise linear probing (paper Appendix B), one variable.
 
-    python scripts/02_layerwise_probe.py --variable speed               # full features
+    python scripts/02_layerwise_probe.py --variable speed               # the brief's experiment
     python scripts/02_layerwise_probe.py --variable speed --limit 100   # debug subset
 
 For every paper layer 0..23 and every one of 5 grouped folds, train the 20-config
 Adam sweep on the fit split, choose on the inner validation split, report on the
-held-out fold. Conditions:
+held-out fold. By default only that runs:
 
     main       encoder features, grouped CV       -> the reproduction (Figure 1)
+
+plus a convergence check (U6): does doubling the epochs change the answer? That
+check is part of doing the core correctly, not an extra experiment.
+
+Additional checks beyond the brief are opt-in, e.g.
+`--conditions main embedding random_cv shuffled pixels`:
+
+    embedding  [OURS] the patch embedding, before block 0
     random_cv  [OURS] ungrouped CV                -> how much seeing test values helps
     shuffled   [OURS] labels permuted             -> no signal: R^2 at or below 0
     pixels     [OURS] raw downsampled frames      -> what the encoder adds
 
-Plus a convergence check (U6): does doubling the epochs change the answer?
+When any of them are in the results, controls.png and error_by_value.png are drawn too.
 
 Needs no GPU -- it reads the cached features from 01_extract.py.
 """
@@ -37,7 +45,9 @@ from vjepa_physics.plots import controls_figure, error_by_value_figure, layerwis
 from vjepa_physics.probes import standardize, sweep
 
 UNITS = {"speed": "m/s", "acceleration": "m/s²"}
-CONDITIONS = ("main", "random_cv", "shuffled", "pixels")
+CORE = ("main",)
+EXTRAS = ("embedding", "random_cv", "shuffled", "pixels")     # [OURS], beyond the brief
+CONDITIONS = CORE + EXTRAS
 
 
 def evaluate(features: dict, y: np.ndarray, folds, probing: dict, epochs: int, device: str,
@@ -95,9 +105,10 @@ def convergence_check(pooled_layer, y, fold, probing, epochs, device, layers):
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--variable", default="speed", choices=["speed"])
+    parser.add_argument("--variable", default="speed", choices=["speed", "acceleration"])
     parser.add_argument("--limit", type=int, default=None, help="use features from a --limit extraction")
-    parser.add_argument("--conditions", nargs="+", default=list(CONDITIONS), choices=CONDITIONS)
+    parser.add_argument("--conditions", nargs="+", default=list(CORE), choices=CONDITIONS,
+                        help="default: main only. Extras: " + ", ".join(EXTRAS))
     parser.add_argument("--control-stride", type=int, default=1,
                         help="probe every Nth layer for random_cv/shuffled (1 = all)")
     parser.add_argument("--no-convergence-check", action="store_true")
@@ -135,9 +146,13 @@ def main() -> None:
     started = time.time()
 
     if "main" in args.conditions:
-        print("\nmain: paper layers 0..23 + patch embedding, grouped CV")
-        sets = {-1: feats.embeddings(), **{l: feats.layer(l) for l in all_layers}}
-        r, oof_main = evaluate(sets, y, grouped, probing, epochs, device, "main", L)
+        print("\nmain: paper layers 0..23, grouped CV")
+        r, oof_main = evaluate({l: feats.layer(l) for l in all_layers}, y, grouped, probing,
+                               epochs, device, "main", L)
+        rows += r
+    if "embedding" in args.conditions:
+        print("\nembedding [OURS]: patch embedding before block 0, grouped CV")
+        r, _ = evaluate({-1: feats.embeddings()}, y, grouped, probing, epochs, device, "embedding", L)
         rows += r
     if "random_cv" in args.conditions:
         print("\nrandom_cv [OURS]: ungrouped CV")
@@ -186,10 +201,12 @@ def main() -> None:
     if oof_main:
         np.savez(oof_path, y=y, clip_id=clip_ids,
                  layers=np.array(list(oof_main)), predictions=np.stack(list(oof_main.values())))
+    extras_present = summary.condition.isin(EXTRAS).any()
     if (summary.condition == "main").any():
         layerwise_figure(summary, figures / "layerwise.png", args.variable, L)
-        controls_figure(summary, figures / "controls.png", args.variable, L)
-    if oof_path.exists():
+        if extras_present:
+            controls_figure(summary, figures / "controls.png", args.variable, L)
+    if extras_present and oof_path.exists():
         saved = np.load(oof_path)
         error_by_value_figure(saved["y"], dict(zip(saved["layers"].tolist(), saved["predictions"])),
                               figures / "error_by_value.png", args.variable, UNITS[args.variable])

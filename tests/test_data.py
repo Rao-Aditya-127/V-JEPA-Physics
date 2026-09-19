@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from conftest import SPEED_DIR, needs_data
+from conftest import ACCELERATION_DIR, SPEED_DIR, needs_acceleration_data, needs_data
 from vjepa_physics.data import load_records, subset
 
 
@@ -24,3 +24,14 @@ def test_subset_is_seeded_and_spans_the_label_range():
     # The dataset is sorted by speed; the first 100 rows cover only a few values.
     assert records.head(100).speed_mps.nunique() < 10
     assert a.speed_mps.nunique() > 40
+
+
+@needs_acceleration_data
+def test_acceleration_records():
+    records = load_records(ACCELERATION_DIR)
+    assert len(records) == 1536
+    assert records.clip_id.is_unique and records.clip_id.is_monotonic_increasing
+    assert records.acceleration_mps2.nunique() == 64
+    assert (records.groupby("acceleration_mps2").theta_degrees.nunique() == 24).all()
+    assert (records.speed_mps == 0).all()                          # every clip starts from rest
+    assert (records.magnitude == records.acceleration_mps2).all()  # the two label columns agree

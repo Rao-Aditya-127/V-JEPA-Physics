@@ -34,6 +34,10 @@ variables:
     dataset: speed
     target: speed_mps
     epochs: 50              # C.11: 50 epochs for speed
+  acceleration:
+    dataset: acceleration
+    target: acceleration_mps2   # identical to the `magnitude` column
+    epochs: 50              # C.11 is silent on acceleration; speed's 50, confirmed by the convergence check
 
 probing:
   n_folds: 5                # Appendix B: 5-fold grouped cross-validation
