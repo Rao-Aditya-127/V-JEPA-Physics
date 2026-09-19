@@ -68,7 +68,7 @@ def evaluate(features: dict, y: np.ndarray, folds, probing: dict, epochs: int, d
         oof[layer] = pred
         r2 = [r["test_r2"] for r in rows if r["layer"] == layer and r["condition"] == condition]
         name = "pixels" if layer is None else ("embedding" if layer == -1 else f"layer {layer:2d}")
-        print(f"  {condition:9s} {name:10s}  R2 = {np.mean(r2):6.3f} +/- {np.std(r2):.3f}"
+        print(f"  {condition:9s} {name:10s}  R2 = {np.mean(r2):6.3f} +/- {np.std(r2, ddof=1):.3f}"
               f"   ({time.time() - started:4.1f} s)")
     return rows, oof
 
@@ -204,9 +204,14 @@ def main() -> None:
     (out_dir / "run.json").write_text(json.dumps(run, indent=2, default=str), encoding="utf-8")
 
     print(f"\ndone in {run['minutes']} min -> {out_dir}")
-    if edge:
-        print(f"note: {edge}/{len(per_fold)} selections chose a learning rate at the edge of the "
-              "grid -- the optimum may lie outside the paper's range.")
+    # Grid-edge picks matter only where there is signal. Under shuffled labels the least-trained
+    # config (lowest lr) overfits least, so it is *expected* to win there.
+    for condition, group in per_fold.groupby("condition"):
+        n_edge = int(group.lr_at_grid_edge.sum())
+        if n_edge and condition != "shuffled":
+            lrs = sorted(group.loc[group.lr_at_grid_edge, "lr"].unique())
+            print(f"note: {condition}: {n_edge}/{len(group)} selections at the lr grid edge {lrs} -- "
+                  "the optimum may lie outside the paper's range.")
 
 
 if __name__ == "__main__":

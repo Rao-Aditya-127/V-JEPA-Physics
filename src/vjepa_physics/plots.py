@@ -58,12 +58,14 @@ def _save(fig, path: Path) -> Path:
     return path
 
 
-def _curve(ax, frame: pd.DataFrame, color: str, label: str, marker: str = "o") -> None:
+def _curve(ax, frame: pd.DataFrame, color: str, label: str, marker: str = "o",
+           dashed: bool = False, z: int = 3) -> None:
     frame = frame.sort_values("layer_fraction")
     x, mean, std = frame.layer_fraction, frame.r2_mean, frame.r2_std.fillna(0)
-    ax.fill_between(x, mean - std, mean + std, color=color, alpha=0.18, linewidth=0, zorder=2)
-    ax.plot(x, mean, color=color, linewidth=2, marker=marker, markersize=4.5,
-            markeredgecolor=SURFACE, markeredgewidth=1, label=label, zorder=3)
+    ax.fill_between(x, mean - std, mean + std, color=color, alpha=0.18, linewidth=0, zorder=z - 1)
+    ax.plot(x, mean, color=color, linewidth=2, linestyle=(0, (5, 3)) if dashed else "-",
+            marker=marker, markersize=4.5, markerfacecolor=SURFACE if dashed else color,
+            markeredgecolor=color if dashed else SURFACE, markeredgewidth=1, label=label, zorder=z)
 
 
 def _ylim(ax, *series: pd.Series) -> None:
@@ -90,14 +92,16 @@ def controls_figure(summary: pd.DataFrame, path: Path, variable: str, num_layers
     _reference_lines(ax, num_layers)
     lows = []
 
-    main = summary[(summary.condition == "main") & (summary.layer >= 0)]
-    _curve(ax, main, BLUE, "grouped CV (reproduction)")
-    lows.append(main.r2_mean - main.r2_std)
-
+    # Ungrouped first and dashed, so the reproduction curve stays visible on top when they coincide.
     random_cv = summary[summary.condition == "random_cv"]
     if len(random_cv):
-        _curve(ax, random_cv, ORANGE, "ungrouped CV (test values seen in training)", marker="s")
+        _curve(ax, random_cv, ORANGE, "ungrouped CV (test values seen in training)", marker="s",
+               dashed=True, z=3)
         lows.append(random_cv.r2_mean - random_cv.r2_std)
+
+    main = summary[(summary.condition == "main") & (summary.layer >= 0)]
+    _curve(ax, main, BLUE, "grouped CV (reproduction)", z=5)
+    lows.append(main.r2_mean - main.r2_std)
 
     shuffled = summary[summary.condition == "shuffled"]
     if len(shuffled):

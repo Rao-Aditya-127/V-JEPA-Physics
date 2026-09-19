@@ -34,6 +34,10 @@ logs/
 *.parquet
 *.feather
 
+# Exception: /results at the repo root holds curated write-ups (markdown + a few
+# figures) and IS tracked. Raw outputs still live in artifacts/, ignored above.
+!/results/
+
 # ---------------------------------------------------------------------------
 # Model and dataset caches
 # ---------------------------------------------------------------------------
