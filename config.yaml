@@ -52,3 +52,25 @@ probing:
   learning_rates: [1.0e-4, 3.0e-4, 1.0e-3, 3.0e-3, 5.0e-3]   # Appendix B
   weight_decays: [0.01, 0.1, 0.4, 0.8]                        # Appendix B
   device: cpu
+
+# Part 1.2: iterative nullspace projection (paper C.11).
+# C.11 fixes lr/wd/epochs and gives no sweep, unlike Appendix B. Note wd = 1e-4 is
+# 100x below the smallest weight decay in Appendix B's grid -- an inconsistency
+# inside the paper; N2 keeps C.11's value and checks round 0 against the 1.1 score.
+nullspace:
+  layer: 8                  # N1: the Physics Emergence Zone, the layer of paper Fig. 4c
+  learning_rate: 1.0e-3     # C.11
+  weight_decay: 1.0e-4      # C.11
+  patience: 3               # N5: R2 must stay below the threshold this many rounds
+  max_rounds:               # N6: above Table 3's range (direction 14-136, speed 16-31)
+    speed: 60
+    acceleration: 60
+    direction: 150
+  stop_r2:                  # N5: C.11's strict thresholds; Fig. 22's are derived post hoc
+    speed: 0.05
+    acceleration: 0.05
+    direction: 0.1
+  thresholds:               # both readings of the paper, reported side by side
+    speed: {c11: 0.05, fig22: 0.1}
+    acceleration: {c11: 0.05, fig22: 0.1}
+    direction: {c11: 0.1, fig22: 0.3}

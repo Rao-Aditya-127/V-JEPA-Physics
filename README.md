@@ -86,13 +86,18 @@ src/vjepa_physics/
   features.py            load cached features; paper layer l == hidden_states[l+1]
   folds.py               5-fold cross-validation grouped by label value
   probes.py              linear probes and the 20-config Adam sweep
+  nullspace.py           Part 1.2: QR, projection, the probe sequence
   plots.py               figures
-scripts/
+scripts/                 pipeline: each step writes artifacts
   00_sanity.py           smoke test before a full run
   01_extract.py          extraction (needs the encoder; GPU recommended)
   02_layerwise_probe.py  Part 1.1 layer-wise probing (CPU is fine)
-  03_polar_figure.py     Part 1.1 combined figure: all three variables, like the paper's Fig. 2c
-tests/                   decode, data, folds and probe correctness
+  03_nullspace.py        Part 1.2 iterative nullspace probing (CPU is fine)
+  figures/               reporting: read cached results, write figures
+    layerwise.py         Part 1.1, all three variables, like the paper's Fig. 2c
+    nullspace.py         Part 1.2 curves + the dimensionality table
+    figure4c.py          Part 1.2 direction, in the form of the paper's Fig. 4c
+tests/                   decode, data, folds, probe and nullspace correctness
 artifacts/               features, splits, results, figures   (not tracked)
 data/                    supplied videos and metadata          (not tracked)
 ```
@@ -107,8 +112,12 @@ python -m pytest -q                 # decode, data, fold and probe checks
 
 python scripts/00_sanity.py         # 4 checks incl. a viability probe; exits non-zero on failure
 python scripts/01_extract.py --dataset speed               # -> artifacts/features/speed
-python scripts/02_layerwise_probe.py --variable speed      # -> artifacts/results/speed
-python scripts/03_polar_figure.py                          # once all three variables are probed
+python scripts/02_layerwise_probe.py --variable speed      # Part 1.1, -> artifacts/results/speed
+python scripts/03_nullspace.py --variable speed           # Part 1.2, ~6 min on CPU
+
+python scripts/figures/layerwise.py                       # once all three variables are probed
+python scripts/figures/nullspace.py
+python scripts/figures/figure4c.py
 ```
 
 Extraction is the only step that needs the encoder: roughly 10 s per clip on a
@@ -134,7 +143,15 @@ comparisons, and limitations, serving as the basis for an open discussion.
 
 ---
 
+## Results
+
+| Part | Write-up |
+|---|---|
+| 1.1 Layer-wise probing | [results/layer-wise-probing](results/layer-wise-probing/README.md) |
+| 1.2 Iterative nullspace probing | [results/nullspace-probing](results/nullspace-probing/README.md) |
+
 ## Status
 
-Part 1.1 (layer-wise probing) is implemented for speed and verified on CPU.
-Full-dataset extraction and results are pending.
+Parts 1.1 and 1.2 are complete for all three variables, with write-ups and figures.
+Part 1.3 (multi-probe subspace steering) and Part 2 (spline steering) are next;
+1.2 saves each round's probe weights and orthonormal basis, which is what 1.3 needs.

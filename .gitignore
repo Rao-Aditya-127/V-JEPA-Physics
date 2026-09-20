@@ -38,6 +38,11 @@ logs/
 # figures) and IS tracked. Raw outputs still live in artifacts/, ignored above.
 !/results/
 
+# Exception: scripts/figures/ is the code that draws figures, not the figures. The
+# `figures/` rule above would otherwise swallow it -- and because git does not descend
+# into an excluded directory, the directory itself has to be re-included, not its files.
+!/scripts/figures/
+
 # ---------------------------------------------------------------------------
 # Model and dataset caches
 # ---------------------------------------------------------------------------

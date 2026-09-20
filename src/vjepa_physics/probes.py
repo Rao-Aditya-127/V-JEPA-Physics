@@ -76,15 +76,26 @@ def sincos(theta_degrees: np.ndarray) -> np.ndarray:
     return np.stack([np.sin(radians), np.cos(radians)], axis=1)
 
 
-def circular_mae(theta_degrees: np.ndarray, pred_sincos: np.ndarray) -> float:
-    """Mean angular error in degrees, measured the short way round the circle.
+def circular_errors(theta_degrees: np.ndarray, pred_sincos: np.ndarray) -> np.ndarray:
+    """Signed angular error in degrees, wrapped to [-180, 180).
 
     The predicted (sin, cos) pair is turned back into an angle with atan2, so only
-    its direction matters, not its length. Perfect is 0°; chance is 90°.
+    its direction matters, not its length.
     """
     pred = np.degrees(np.arctan2(pred_sincos[:, 0], pred_sincos[:, 1]))
-    error = (pred - np.asarray(theta_degrees) + 180.0) % 360.0 - 180.0   # wrapped to [-180, 180)
-    return float(np.abs(error).mean())
+    return (pred - np.asarray(theta_degrees) + 180.0) % 360.0 - 180.0
+
+
+def circular_mae(theta_degrees: np.ndarray, pred_sincos: np.ndarray) -> float:
+    """Mean angular error in degrees, the short way round. Perfect is 0°; chance is 90°."""
+    return float(np.abs(circular_errors(theta_degrees, pred_sincos)).mean())
+
+
+def accuracy_within(theta_degrees: np.ndarray, pred_sincos: np.ndarray, tol: float = 15.0) -> float:
+    """Fraction of clips predicted within `tol` degrees -- the y-axis of the paper's
+    Figure 4c ("accuracy within 15°"), which the text never defines. Chance at 15° is
+    2*15/360 = 0.083."""
+    return float((np.abs(circular_errors(theta_degrees, pred_sincos)) <= tol).mean())
 
 
 def _as_2d(y: np.ndarray) -> np.ndarray:

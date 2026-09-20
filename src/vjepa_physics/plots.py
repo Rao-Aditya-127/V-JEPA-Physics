@@ -200,3 +200,112 @@ def polar_figure(summaries: dict[str, pd.DataFrame], path: Path, num_layers: int
     fig.set_facecolor(SURFACE)
     ax.set_facecolor(SURFACE)
     return _save(fig, path)
+
+
+def nullspace_figure(summaries: dict[str, pd.DataFrame], path: Path,
+                     title: str = "Iterative nullspace projection",
+                     ylim: tuple[float, float] = (-0.05, 1.05),
+                     thresholds: dict[str, float] | None = None,
+                     xmax: int | None = None) -> Path:
+    """Part 1.2 (paper Fig. 4c / 23): held-out R² against dimensions removed.
+
+    `summaries` maps a variable to its nullspace summary.csv. Only rounds where every
+    fold is still running are drawn, so the band always covers the same folds. A
+    curve that drops at once means the variable lives in a few directions; a slow
+    decay means it is written redundantly. Direction's sawtooth -- the paper's
+    signature of sin/cos feature pairs -- shows up as the jagged red line.
+    """
+    fig, ax = plt.subplots(figsize=(6.8, 4.3), dpi=150)
+    for variable, frame in summaries.items():
+        color, marker, label = POLAR_STYLE.get(variable, (BLUE, "o", variable))
+        frame = frame[frame.n_folds == frame.n_folds.max()].sort_values("dims_removed")
+        if xmax is not None:
+            frame = frame[frame.dims_removed <= xmax]
+        x, mean = frame.dims_removed, frame.test_r2_mean
+        std = frame.test_r2_std.fillna(0)
+        ax.fill_between(x, mean - std, mean + std, color=color, alpha=0.18, linewidth=0, zorder=2)
+        ax.plot(x, mean, color=color, linewidth=1.8, label=label.capitalize(), zorder=3,
+                marker=marker, markersize=3.5, markevery=max(1, len(frame) // 20))
+    for name, level in (thresholds or {}).items():
+        ax.axhline(level, color=MUTED, linewidth=1, linestyle=(0, (4, 3)), zorder=1)
+        ax.text(ax.get_xlim()[1], level, name, color=MUTED, fontsize=8, ha="right", va="bottom")
+    ax.axhline(0, color=AXIS, linewidth=1.2, zorder=1)
+    ax.set_ylim(*ylim)
+    _style(ax, "Dimensions removed", "Held-out R²  (mean ± std over folds)", title)
+    ax.legend(frameon=False, fontsize=9, labelcolor=INK_2, loc="upper right")
+    return _save(fig, path)
+
+
+def sawtooth_figure(summary: pd.DataFrame, path: Path, xmax: int = 40,
+                    title: str = "Direction: the first rounds up close") -> Path:
+    """Part 1.2, direction only (paper Fig. 4c): R² and accuracy within 15° over the
+    first few rounds, where the sawtooth is visible. The paper's Figure 4c uses
+    accuracy within 15°, a metric it never defines; R² is on the same axis for
+    comparison with the other variables."""
+    frame = summary[(summary.n_folds == summary.n_folds.max()) &
+                    (summary.dims_removed <= xmax)].sort_values("dims_removed")
+    fig, ax = plt.subplots(figsize=(6.8, 4.0), dpi=150)
+    for column, color, label in [("test_r2", RED, "Held-out R²"),
+                                 ("test_acc15", BLUE, "Accuracy within 15°")]:
+        if f"{column}_mean" not in frame:
+            continue
+        mean, std = frame[f"{column}_mean"], frame[f"{column}_std"].fillna(0)
+        ax.fill_between(frame.dims_removed, mean - std, mean + std, color=color, alpha=0.18,
+                        linewidth=0, zorder=2)
+        ax.plot(frame.dims_removed, mean, color=color, linewidth=2, marker="o", markersize=4,
+                label=label, zorder=3)
+    ax.axhline(2 * 15 / 360, color=MUTED, linewidth=1, linestyle=(0, (4, 3)), zorder=1)
+    ax.text(xmax, 2 * 15 / 360, "chance @15°", color=MUTED, fontsize=8, ha="right", va="bottom")
+    ax.axhline(0, color=AXIS, linewidth=1.2, zorder=1)
+    ax.set_ylim(-0.05, 1.05)
+    _style(ax, "Dimensions removed", "Score", title)
+    ax.legend(frameon=False, fontsize=9, labelcolor=INK_2, loc="upper right")
+    return _save(fig, path)
+
+
+def figure4c(summary: pd.DataFrame, path: Path, metric: str = "acc15", floor: float | None = None,
+             title: str = "Direction encoding redundancy") -> Path:
+    """Part 1.2, direction: our version of the paper's Figure 4c.
+
+    Two curves from the same run, differing only in WHEN the probe is scored:
+
+      retrained   a fresh probe fitted on the current activations -- what the
+                  representation still supports
+      interleaved that score alternating with the same probe re-scored after its own
+                  readout subspace has been projected out. The second kind cannot vary:
+                  the weighted sum is zero, so the probe emits its bias, which for
+                  direction is one fixed angle. Accuracy therefore drops to an
+                  arithmetic floor (2 reachable angles out of however many the dataset
+                  has) rather than to anything about the encoder.
+
+    The interleaved curve is a sawtooth; the retrained one is smooth. The paper reads
+    its sawtooth as evidence of paired sin/cos features, so plotting both together is
+    the clearest way to show what else can produce it.
+    """
+    frame = summary[summary.n_folds == summary.n_folds.max()].sort_values("round")
+    fresh, stale = frame[f"test_{metric}_mean"].to_numpy(), frame[f"stale_{metric}_mean"].to_numpy()
+    fresh_sd = frame[f"test_{metric}_std"].fillna(0).to_numpy()
+    stale_sd = frame[f"stale_{metric}_std"].fillna(0).to_numpy()
+    rounds = frame["round"].to_numpy()
+
+    x = np.empty(2 * len(rounds));      x[0::2], x[1::2] = rounds, rounds + 0.5
+    y = np.empty_like(x);               y[0::2], y[1::2] = fresh, stale
+    sd = np.empty_like(x);              sd[0::2], sd[1::2] = fresh_sd, stale_sd
+
+    fig, axes = plt.subplots(1, 2, figsize=(11.5, 4.2), dpi=150, sharey=True)
+    for i, (ax, (xs, ys, sds, color, head)) in enumerate(zip(axes, [
+            (x, y, sd, BLUE, "Scored before and after removal, interleaved"),
+            (rounds, fresh, fresh_sd, RED, "Scored only after retraining")])):
+        ax.fill_between(xs, 100 * (ys - sds), 100 * (ys + sds), color=color, alpha=0.2, linewidth=0)
+        ax.plot(xs, 100 * ys, color=color, linewidth=1.4)
+        if floor is not None:
+            ax.axhline(100 * floor, color=MUTED, linewidth=1, linestyle=(0, (4, 3)))
+            if i:            # label once, on the panel where the data does not sit on it
+                ax.text(rounds.max(), 100 * floor, f"dead-component floor {100 * floor:.1f}% ",
+                        color=MUTED, fontsize=8, ha="right", va="bottom")
+        ax.set_xlim(0, rounds.max())
+        ax.set_ylim(0, 105)
+        _style(ax, "Orthogonal probe number", "" if i else "Accuracy within 15°  (%)", head)
+    fig.suptitle(title, color=INK, fontsize=12, fontweight="bold", y=1.03)
+    fig.tight_layout()
+    return _save(fig, path)

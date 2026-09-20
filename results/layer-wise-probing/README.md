@@ -60,7 +60,7 @@ markers were added for colour-blind readers.
 ## Regenerate the figure
 
 ```bash
-python scripts/03_polar_figure.py
+python scripts/figures/layerwise.py
 ```
 
 It reads the three probing results from `artifacts/results/` and writes both

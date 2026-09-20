@@ -1,6 +1,6 @@
 """Part 1.1: the combined layer-wise figure, reproducing the paper's Figure 2c.
 
-    python scripts/03_polar_figure.py
+    python scripts/figures/layerwise.py
 
 Reads the layer-wise probing results for speed, direction and acceleration (from
 02_layerwise_probe.py) and draws all three curves on one axis, styled after the
@@ -15,7 +15,7 @@ import argparse
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))  # works without pip install
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))  # works without pip install
 
 import pandas as pd
 
