@@ -74,3 +74,12 @@ nullspace:
     speed: {c11: 0.05, fig22: 0.1}
     acceleration: {c11: 0.05, fig22: 0.1}
     direction: {c11: 0.1, fig22: 0.3}
+
+# Part 1.3: multi-probe subspace steering (paper C.12).
+# The subspace comes from the nullspace run above; every clip is steered to one target
+# value and an evaluation probe trained only on held-out clips is asked what it reads.
+steering:
+  target:                   # what every clip is steered to
+    direction: 90.0         # C.12 p.33 steers all clips to theta* = 90 deg
+    speed: 2.0              # [OURS] mid-range; the paper never steers the scalars
+    acceleration: 5.0       # [OURS] mid-range

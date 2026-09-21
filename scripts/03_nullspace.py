@@ -170,6 +170,7 @@ def main() -> None:
         # Everything Part 1.3 needs to steer in this subspace, in activation units.
         saved[f"fold{k}_basis"] = seq.basis
         saved[f"fold{k}_weights"] = np.stack(seq.weights)
+        saved[f"fold{k}_biases"] = np.stack(seq.biases)
         saved[f"fold{k}_mean"] = X_all[train].mean(axis=0)
         saved[f"fold{k}_std"] = X_all[train].std(axis=0) + 1e-6
         saved[f"fold{k}_test_clips"] = feats.labels.clip_id.to_numpy()[fold.test]

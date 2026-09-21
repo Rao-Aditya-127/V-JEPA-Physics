@@ -309,3 +309,65 @@ def figure4c(summary: pd.DataFrame, path: Path, metric: str = "acc15", floor: fl
     fig.suptitle(title, color=INK, fontsize=12, fontweight="bold", y=1.03)
     fig.tight_layout()
     return _save(fig, path)
+
+
+def steering_figure(summary: pd.DataFrame, path: Path, variable: str, unit: str,
+                    target: float, baseline: float | None = None,
+                    title: str | None = None) -> Path:
+    """Part 1.3 (paper Fig. 24): steering error against the number of probes used.
+
+    Two curves, and the second is the point. `mae_to_target` falls as more directions
+    are steered together; `mae_to_truth` must RISE by roughly as much. If both fell,
+    the target would be going into a corner of the space the evaluation probe reads
+    but the representation does not use -- the intervention would be writing a note
+    to the probe rather than changing the encoded variable.
+
+    All errors come from a probe trained only on held-out clips, which saw neither the
+    steering probes nor the activations that built the subspace.
+    """
+    frame = summary.sort_values("n_probes")
+    fig, ax = plt.subplots(figsize=(6.8, 4.3), dpi=150)
+    for column, color, label in [("mae_to_target", BLUE, f"error to the target ({target:g}{unit})"),
+                                 ("mae_to_truth", ORANGE, "error to the clip's true value")]:
+        mean, std = frame[f"{column}_mean"], frame[f"{column}_std"].fillna(0)
+        ax.fill_between(frame.n_probes, mean - std, mean + std, color=color, alpha=0.18,
+                        linewidth=0, zorder=2)
+        ax.plot(frame.n_probes, mean, color=color, linewidth=2, label=label, zorder=3)
+    if baseline is not None:
+        ax.axhline(baseline, color=MUTED, linewidth=1, linestyle=(0, (4, 3)), zorder=1)
+        ax.text(frame.n_probes.max(), baseline, "unsteered ", color=MUTED, fontsize=8,
+                ha="right", va="bottom")
+    ax.set_xlim(0, frame.n_probes.max())
+    ax.set_ylim(bottom=0)
+    _style(ax, "Probes steered together", f"Mean absolute error ({unit.strip()})",
+           title or f"Steering {variable} at layer 8, judged by a held-out probe")
+    ax.legend(frameon=False, fontsize=9, labelcolor=INK_2, loc="center right")
+    return _save(fig, path)
+
+
+def steering_overlay(summaries: dict[str, pd.DataFrame], path: Path,
+                     title: str = "How much of the gap does steering close?") -> Path:
+    """All three variables on one axis, each normalised by its own unsteered error.
+
+    Degrees, m/s and m/s^2 cannot share a y-axis, so each curve is divided by its own
+    baseline: 1.0 means steering achieved nothing, 0 means it reached the target
+    exactly. That makes "how well does this method work" comparable across variables,
+    which is what Part 2 needs in order to compare against spline steering.
+    """
+    fig, ax = plt.subplots(figsize=(6.8, 4.3), dpi=150)
+    for variable, frame in summaries.items():
+        color, marker, label = POLAR_STYLE.get(variable, (BLUE, "o", variable))
+        frame = frame.sort_values("n_probes")
+        baseline = float(frame.mae_to_target_mean.iloc[0])
+        y = frame.mae_to_target_mean / baseline
+        sd = frame.mae_to_target_std.fillna(0) / baseline
+        ax.fill_between(frame.n_probes, y - sd, y + sd, color=color, alpha=0.18, linewidth=0, zorder=2)
+        ax.plot(frame.n_probes, y, color=color, linewidth=2, label=label.capitalize(), zorder=3,
+                marker=marker, markersize=4, markevery=max(1, len(frame) // 15))
+    ax.axhline(1.0, color=MUTED, linewidth=1, linestyle=(0, (4, 3)), zorder=1)
+    ax.text(0, 1.0, " no improvement", color=MUTED, fontsize=8, ha="left", va="bottom")
+    ax.set_ylim(0, 1.15)
+    ax.set_xlim(left=0)
+    _style(ax, "Probes steered together", "Error to target, relative to unsteered", title)
+    ax.legend(frameon=False, fontsize=9, labelcolor=INK_2, loc="upper right")
+    return _save(fig, path)

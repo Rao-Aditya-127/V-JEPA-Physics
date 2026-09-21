@@ -87,16 +87,19 @@ src/vjepa_physics/
   folds.py               5-fold cross-validation grouped by label value
   probes.py              linear probes and the 20-config Adam sweep
   nullspace.py           Part 1.2: QR, projection, the probe sequence
+  steering.py            Part 1.3: the steering subspace and the target solve
   plots.py               figures
 scripts/                 pipeline: each step writes artifacts
   00_sanity.py           smoke test before a full run
   01_extract.py          extraction (needs the encoder; GPU recommended)
   02_layerwise_probe.py  Part 1.1 layer-wise probing (CPU is fine)
   03_nullspace.py        Part 1.2 iterative nullspace probing (CPU is fine)
+  04_steering.py         Part 1.3 multi-probe subspace steering (CPU is fine)
   figures/               reporting: read cached results, write figures
     layerwise.py         Part 1.1, all three variables, like the paper's Fig. 2c
     nullspace.py         Part 1.2 curves + the dimensionality table
     figure4c.py          Part 1.2 direction, in the form of the paper's Fig. 4c
+    steering.py          Part 1.3 steering curves, like the paper's Fig. 24
 tests/                   decode, data, folds, probe and nullspace correctness
 artifacts/               features, splits, results, figures   (not tracked)
 data/                    supplied videos and metadata          (not tracked)
@@ -114,10 +117,12 @@ python scripts/00_sanity.py         # 4 checks incl. a viability probe; exits no
 python scripts/01_extract.py --dataset speed               # -> artifacts/features/speed
 python scripts/02_layerwise_probe.py --variable speed      # Part 1.1, -> artifacts/results/speed
 python scripts/03_nullspace.py --variable speed           # Part 1.2, ~6 min on CPU
+python scripts/04_steering.py --variable speed            # Part 1.3, ~1 min on CPU
 
 python scripts/figures/layerwise.py                       # once all three variables are probed
 python scripts/figures/nullspace.py
 python scripts/figures/figure4c.py
+python scripts/figures/steering.py
 ```
 
 Extraction is the only step that needs the encoder: roughly 10 s per clip on a
@@ -149,9 +154,9 @@ comparisons, and limitations, serving as the basis for an open discussion.
 |---|---|
 | 1.1 Layer-wise probing | [results/layer-wise-probing](results/layer-wise-probing/README.md) |
 | 1.2 Iterative nullspace probing | [results/nullspace-probing](results/nullspace-probing/README.md) |
+| 1.3 Multi-probe subspace steering | [results/subspace-steering](results/subspace-steering/README.md) |
 
 ## Status
 
-Parts 1.1 and 1.2 are complete for all three variables, with write-ups and figures.
-Part 1.3 (multi-probe subspace steering) and Part 2 (spline steering) are next;
-1.2 saves each round's probe weights and orthonormal basis, which is what 1.3 needs.
+Part 1 is complete for all three variables, with write-ups and figures. Part 2
+(spline / manifold steering, and its comparison against Part 1.3) is next.

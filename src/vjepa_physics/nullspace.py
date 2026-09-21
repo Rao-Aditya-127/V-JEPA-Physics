@@ -133,6 +133,8 @@ class Sequence:
     rounds: pd.DataFrame                  # one row per round; see the columns built below
     basis: np.ndarray                     # (d, dims_removed) everything deleted, orthonormal
     weights: list[np.ndarray] = field(default_factory=list)   # each round's raw W, for Part 1.3
+    biases: list[np.ndarray] = field(default_factory=list)    # and its bias -- steering solves
+                                                              # W x + b = y*, so b is needed too
 
     @property
     def dims_removed(self) -> int:
@@ -179,7 +181,7 @@ def run_sequence(X_train: np.ndarray, y_train: np.ndarray, X_test: np.ndarray, y
     X_train = np.asarray(X_train, dtype=np.float64)              # float64: the projection is
     X_test = np.asarray(X_test, dtype=np.float64)                # applied hundreds of times
     basis = np.zeros((X_train.shape[1], 0))
-    rows, weights, below = [], [], 0
+    rows, weights, biases, below = [], [], [], 0
 
     # Always predicting the training mean -- the "random baseline" C.11's speed rule
     # compares against, and the definition of R2 = 0.
@@ -192,6 +194,7 @@ def run_sequence(X_train: np.ndarray, y_train: np.ndarray, X_test: np.ndarray, y
                  fit_probe(X_train, y_train, lr=lr, wd=wd, epochs=epochs,
                            batch_size=batch_size, seed=seed, device=device))
         W = probe.weight.detach().cpu().numpy().astype(np.float64)          # (k_out, d)
+        bias = probe.bias.detach().cpu().numpy().astype(np.float64)         # (k_out,)
         test = _score(y_test, predict(probe, X_test), angles_test)
         train = _score(y_train, predict(probe, X_train), None)
 
@@ -228,6 +231,7 @@ def run_sequence(X_train: np.ndarray, y_train: np.ndarray, X_test: np.ndarray, y
             row["test_circ_mae"], row["test_acc15"] = test["circ_mae"], test["acc15"]
         rows.append(row)
         weights.append(W)
+        biases.append(bias)
 
         if verbose:
             extra = (f"  circMAE {row['test_circ_mae']:5.1f} deg  acc@15 {row['test_acc15']:.3f}"
@@ -244,7 +248,7 @@ def run_sequence(X_train: np.ndarray, y_train: np.ndarray, X_test: np.ndarray, y
                 print(f"    stopped: test R2 < {stop_r2} for {patience} consecutive rounds")
             break
 
-    return Sequence(rounds=pd.DataFrame(rows), basis=basis, weights=weights)
+    return Sequence(rounds=pd.DataFrame(rows), basis=basis, weights=weights, biases=biases)
 
 
 def dimensionality(rounds: pd.DataFrame, threshold: float, patience: int = 3,
