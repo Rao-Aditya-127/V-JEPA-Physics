@@ -83,3 +83,13 @@ steering:
     direction: 90.0         # C.12 p.33 steers all clips to theta* = 90 deg
     speed: 2.0              # [OURS] mid-range; the paper never steers the scalars
     acceleration: 5.0       # [OURS] mid-range
+
+# Part 2: activation manifolds (Goodfire / Wurgaft et al., App. A.3 / B.1).
+# PCA, group clips by label value, average, then one smoothing spline per PCA
+# coordinate. Direction's spline is periodic because its centroids lie on a circle:
+# opposite angles are 19.6x further apart than neighbours, where a circle predicts 20.4.
+manifold:
+  centroid_variance: 0.90   # PCA kept until this much of the CENTROID variance is held
+                            # (7-13 dims here; the clips need 60+, but most of that is
+                            # start position and the other variables, not the manifold)
+  smoothing_grid: [0.0, 1.0, 10.0, 100.0, 1000.0, 10000.0, 100000.0]

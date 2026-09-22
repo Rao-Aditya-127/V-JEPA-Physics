@@ -371,3 +371,166 @@ def steering_overlay(summaries: dict[str, pd.DataFrame], path: Path,
     _style(ax, "Probes steered together", "Error to target, relative to unsteered", title)
     ax.legend(frameon=False, fontsize=9, labelcolor=INK_2, loc="upper right")
     return _save(fig, path)
+
+
+def _manifold_frame(ax, title, xlabel, ylabel):
+    ax.set_facecolor(SURFACE)
+    ax.grid(True, color=GRID, linewidth=0.7)
+    ax.set_axisbelow(True)
+    for side in ("top", "right"):
+        ax.spines[side].set_visible(False)
+    for side in ("left", "bottom"):
+        ax.spines[side].set_color(AXIS)
+    ax.tick_params(colors=MUTED, labelcolor=INK_2, labelsize=8)
+    ax.set_xlabel(xlabel, color=INK_2, fontsize=9)
+    ax.set_ylabel(ylabel, color=INK_2, fontsize=9)
+    ax.set_title(title, color=INK, fontsize=10, loc="left")
+
+
+def manifold_figure(clips, clip_values, points, point_values, curve, curve_values, path,
+                    variable: str, unit: str, periodic: bool, title: str | None = None) -> Path:
+    """Part 2, figure 1: the fitted manifold, in the plane of the centroids.
+
+    `clips`, `points` (centroids) and `curve` are already projected to 3 coordinates of
+    a frame built from the CENTROIDS rather than the clips -- the clips' own principal
+    directions are dominated by start position and the other physical variables, which
+    the manifold does not describe, and in that frame the curve is edge-on and invisible.
+
+    The clips are drawn because they are the honest part of the picture: they scatter
+    1.4-2.6x further from the curve than the curve is long, so the manifold is a
+    conditional mean threading a cloud, not a surface the data lies on.
+    """
+    cmap = "twilight" if periodic else "viridis"
+    fig, axes = plt.subplots(1, 2, figsize=(10.5, 4.4), dpi=150)
+    for ax, (i, j) in zip(axes, [(0, 1), (0, 2)]):
+        ax.scatter(clips[:, i], clips[:, j], c=clip_values, cmap=cmap, s=4, alpha=0.18,
+                   linewidths=0, zorder=2)
+        ax.plot(curve[:, i], curve[:, j], color=INK, linewidth=2.2, zorder=4, alpha=0.85)
+        sc = ax.scatter(points[:, i], points[:, j], c=point_values, cmap=cmap, s=34,
+                        edgecolors=SURFACE, linewidths=0.8, zorder=5)
+        _manifold_frame(ax, f"PC{i+1} vs PC{j+1}", f"centroid PC{i+1}", f"centroid PC{j+1}")
+    bar = fig.colorbar(sc, ax=axes, fraction=0.03, pad=0.02)
+    bar.set_label(f"{variable} ({unit.strip()})" if unit.strip() else variable,
+                  color=INK_2, fontsize=9)
+    bar.ax.tick_params(colors=MUTED, labelcolor=INK_2, labelsize=8)
+    fig.suptitle(title or f"Activation manifold for {variable}, layer 8",
+                 color=INK, fontsize=12, fontweight="bold", y=1.02)
+    return _save(fig, path)
+
+
+def manifold_vs_chord_figure(curve, chords, labels, path, variable: str,
+                             title: str | None = None) -> Path:
+    """Part 2, figure 2: the curve against the straight paths between points on it.
+
+    A straight line between two values is what linear steering takes. Where it leaves
+    the curve, it passes through activations the encoder never produces -- which for
+    direction means states with no direction at all.
+    """
+    fig, axes = plt.subplots(1, 2, figsize=(10.5, 4.4), dpi=150)
+    colours = [ORANGE, RED, AQUA]
+    for ax, (i, j) in zip(axes, [(0, 1), (0, 2)]):
+        ax.plot(curve[:, i], curve[:, j], color=INK, linewidth=2.2, zorder=3,
+                label="the manifold")
+        for n, (path_points, name) in enumerate(zip(chords, labels)):
+            ax.plot(path_points[:, i], path_points[:, j], color=colours[n % len(colours)],
+                    linewidth=1.8, linestyle=(0, (5, 2)), zorder=4, label=name)
+            ax.scatter(path_points[[0, -1], i], path_points[[0, -1], j],
+                       color=colours[n % len(colours)], s=26, zorder=5)
+        _manifold_frame(ax, f"PC{i+1} vs PC{j+1}", f"centroid PC{i+1}", f"centroid PC{j+1}")
+    axes[0].legend(frameon=False, fontsize=8, labelcolor=INK_2, loc="best")
+    fig.suptitle(title or f"{variable}: the curve against straight paths across it",
+                 color=INK, fontsize=12, fontweight="bold", y=1.02)
+    fig.tight_layout()
+    return _save(fig, path)
+
+
+def manifold_residual_figure(values, curve_error, line_error, path, variable: str,
+                             unit: str, scatter: float | None = None) -> Path:
+    """Part 2, figure 3: how far held-out clips sit from the curve, across the range.
+
+    Both curves are distances in standardised activation units. `scatter` marks the
+    average distance of a clip from its own value's centroid -- the floor no curve
+    parameterised by this variable alone can go below, because the remaining spread is
+    start position and the other physical variables.
+    """
+    order = np.argsort(values)
+    fig, ax = plt.subplots(figsize=(6.8, 4.1), dpi=150)
+    for err, colour, name in [(line_error, ORANGE, "best straight line"),
+                              (curve_error, BLUE, "fitted manifold")]:
+        frame = pd.DataFrame({"v": np.asarray(values)[order], "e": np.asarray(err)[order]})
+        grouped = frame.groupby("v").e.agg(["mean", "std"]).reset_index()
+        ax.fill_between(grouped.v, grouped["mean"] - grouped["std"].fillna(0),
+                        grouped["mean"] + grouped["std"].fillna(0), color=colour,
+                        alpha=0.15, linewidth=0, zorder=2)
+        ax.plot(grouped.v, grouped["mean"], color=colour, linewidth=2, marker="o",
+                markersize=4, label=name, zorder=3)
+    if scatter is not None:
+        ax.axhline(scatter, color=MUTED, linewidth=1, linestyle=(0, (4, 3)), zorder=1)
+        ax.text(grouped.v.max(), scatter, "spread within one value ", color=MUTED,
+                fontsize=8, ha="right", va="bottom")
+    ax.set_ylim(bottom=0)
+    _style(ax, f"{variable} ({unit.strip()})" if unit.strip() else variable,
+           "Distance from a held-out clip", f"{variable}: where the manifold fits")
+    ax.legend(frameon=False, fontsize=9, labelcolor=INK_2, loc="lower right")
+    return _save(fig, path)
+
+
+def manifold_3d_figure(clips, clip_values, points, point_values, curve, path,
+                       variable: str, unit: str, periodic: bool,
+                       views=((74, -64, "Top view"), (8, -64, "Side view")),
+                       title: str | None = None) -> Path:
+    """Part 2, figure 1b: the manifold in 3D, in the Goodfire paper's house style.
+
+    Two viewing angles of the same three centroid components, with the curve and its
+    centroids dropped onto a floor plane as a grey shadow. The shadow is not
+    decoration: in a static 3D scatter there is no way to judge depth, and the paper
+    uses the same device. A shape that survives both views is real; one that appears
+    in a single view is an artefact of where you happened to stand.
+
+    A thinned sample of clips is drawn very faintly. Their figure omits the raw points
+    -- in their Mountain Car setting the clips sit close to the curve -- but ours do
+    not, scattering 1.4-2.6x further from the curve than the curve is long, so leaving
+    them out entirely would imply a tidiness this data does not have.
+    """
+    cmap = "twilight" if periodic else "viridis"
+    floor = min(curve[:, 2].min(), points[:, 2].min()) - 0.35 * np.ptp(curve[:, 2])
+
+    fig = plt.figure(figsize=(11.5, 5.0), dpi=150)
+    for n, (elev, azim, name) in enumerate(views):
+        ax = fig.add_subplot(1, len(views), n + 1, projection="3d")
+        ax.view_init(elev=elev, azim=azim)
+
+        # shadow first, so everything else sits on top of it
+        ax.plot(curve[:, 0], curve[:, 1], zs=floor, zdir="z", color=AXIS,
+                linewidth=1.6, alpha=0.7, zorder=1)
+        ax.scatter(points[:, 0], points[:, 1], zs=floor, zdir="z", color=AXIS,
+                   marker="D", s=12, alpha=0.5, zorder=1)
+
+        if clips is not None and len(clips):
+            ax.scatter(clips[:, 0], clips[:, 1], clips[:, 2], c=clip_values, cmap=cmap,
+                       s=3, alpha=0.10, linewidths=0, zorder=2)
+        ax.plot(curve[:, 0], curve[:, 1], curve[:, 2], color=INK, linewidth=2.0,
+                alpha=0.9, zorder=3)
+        sc = ax.scatter(points[:, 0], points[:, 1], points[:, 2], c=point_values,
+                        cmap=cmap, marker="D", s=30, edgecolors=SURFACE,
+                        linewidths=0.6, zorder=4)
+
+        ax.set_zlim(floor, max(curve[:, 2].max(), points[:, 2].max()))
+        for pane in (ax.xaxis, ax.yaxis, ax.zaxis):
+            pane.set_pane_color((1.0, 1.0, 1.0, 0.0))
+            pane._axinfo["grid"].update(color=GRID, linewidth=0.6)
+        ax.set_xlabel("PC1", color=INK_2, fontsize=8, labelpad=-6)
+        ax.set_ylabel("PC2", color=INK_2, fontsize=8, labelpad=-6)
+        ax.set_zlabel("PC3", color=INK_2, fontsize=8, labelpad=-6)
+        ax.tick_params(colors=MUTED, labelsize=6, pad=-3)
+        for axis in (ax.xaxis, ax.yaxis, ax.zaxis):
+            axis.set_major_locator(matplotlib.ticker.MaxNLocator(4))
+        ax.set_title(name, color=INK, fontsize=10)
+
+    bar = fig.colorbar(sc, ax=fig.axes, fraction=0.022, pad=0.04)
+    bar.set_label(f"{variable} ({unit.strip()})" if unit.strip() else variable,
+                  color=INK_2, fontsize=9)
+    bar.ax.tick_params(colors=MUTED, labelcolor=INK_2, labelsize=8)
+    fig.suptitle(title or f"Activation manifold for {variable}, layer 8",
+                 color=INK, fontsize=12, fontweight="bold", y=0.98)
+    return _save(fig, path)
