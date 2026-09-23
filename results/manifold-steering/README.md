@@ -20,8 +20,8 @@ open-ended.
 
 | | |
 |---|---|
-| **[1. The geometry](activation-manifolds/README.md)** | What shape do the activations occupy? Fit it, visualise it, and test whether the curvature is real. **Complete.** |
-| 2. Steering along it | Move along the curve instead of across it, and compare against Part 1.3's multi-probe subspace method. *Next.* |
+| **[1. The geometry](activation-manifolds/README.md)** | What shape do the activations occupy? Fit it, visualise it, and test whether the curvature is real. |
+| **[2. Steering along it](steering-comparison/README.md)** | Move along the curve instead of across it, and compare against Part 1.3's multi-probe subspace method. |
 
 ## What stage 1 found
 
@@ -34,8 +34,14 @@ fitted with a periodic spline so the loop closes.
 0.93–0.96 with the value — but only 1.6–1.8% better described by a curve than by a
 straight line.
 
-**That difference is the prediction for stage 2.** Curved steering can only help where
-the geometry is curved. Direction should benefit; the scalars probably will not.
+**That difference predicted stage 2, and stage 2 confirmed it.** Manifold steering
+beats linear steering by **59%** for direction — rising to **85%** for clips crossing
+more than half the circle — and *loses* by 19–38% for the scalars, where the fitted
+curvature is mostly noise and following it is a detour.
+
+The useful form of that result: a cheap test run beforehand (does the curve beat a
+straight line at reconstructing held-out clips?) predicts which way steering will go.
+Direction +12.7%, the scalars +1.6–1.8%.
 
 **A by-product worth noting:** projecting a clip onto the fitted curve decodes the
 variable with no probe at all — 8.96° for direction, 0.31 m/s for speed — roughly half

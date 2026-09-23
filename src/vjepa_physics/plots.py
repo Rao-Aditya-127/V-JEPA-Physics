@@ -534,3 +534,114 @@ def manifold_3d_figure(clips, clip_values, points, point_values, curve, path,
     fig.suptitle(title or f"Activation manifold for {variable}, layer 8",
                  color=INK, fontsize=12, fontweight="bold", y=0.98)
     return _save(fig, path)
+
+
+METHOD_STYLE = {"linear": (ORANGE, "s", "linear steering"),
+                "manifold": (BLUE, "o", "manifold steering"),
+                "subspace": (AQUA, "^", "subspace steering (Part 1.3)")}
+
+
+def steering_paths_figure(curve, paths, path, variable: str, unit: str,
+                          title: str | None = None) -> Path:
+    """Part 2, stage 2: the two routes drawn on the manifold (cf. paper Fig. 7c).
+
+    `paths` maps a method name to its waypoints, already projected into the drawing
+    frame. Illustrative rather than evidential -- it is one journey between two
+    centroids, with no held-out evaluation -- but it is the picture that makes the
+    argument immediately: one route follows the shape the activations occupy, the
+    other cuts across the empty middle.
+    """
+    fig, axes = plt.subplots(1, 2, figsize=(10.5, 4.4), dpi=150)
+    for ax, (i, j) in zip(axes, [(0, 1), (0, 2)]):
+        ax.plot(curve[:, i], curve[:, j], color=MUTED, linewidth=2.0, zorder=2,
+                label="the manifold", alpha=0.7)
+        for method, points in paths.items():
+            colour, marker, name = METHOD_STYLE[method]
+            ax.plot(points[:, i], points[:, j], color=colour, linewidth=1.8, zorder=3, label=name)
+            ax.scatter(points[:, i], points[:, j], color=colour, s=16, zorder=4,
+                       edgecolors=SURFACE, linewidths=0.5)
+        _manifold_frame(ax, f"PC{i+1} vs PC{j+1}", f"centroid PC{i+1}", f"centroid PC{j+1}")
+    axes[0].legend(frameon=False, fontsize=8, labelcolor=INK_2, loc="best")
+    fig.suptitle(title or f"{variable}: the two routes between the same two states",
+                 color=INK, fontsize=12, fontweight="bold", y=1.02)
+    fig.tight_layout()
+    return _save(fig, path)
+
+
+def steering_tracking_figure(summary: pd.DataFrame, path, variable: str, unit: str,
+                             methods=("linear", "manifold"), confidence: bool = False,
+                             title: str | None = None) -> Path:
+    """Part 2, stage 2: how far the readout is from where the clip should be, along the path.
+
+    The y-axis is the gap between what a held-out probe reads and the value the clip is
+    supposed to have reached at that point of the journey. Low means the readout is
+    tracking; a hump in the middle means the clip is not travelling, it is hanging back
+    and then lurching -- the "teleportation" the paper describes.
+
+    The methods coincide exactly at t = 0 and t = 1 by construction, so only the
+    middle of the plot carries information.
+    """
+    panels = 2 if confidence else 1
+    fig, axes = plt.subplots(1, panels, figsize=(6.6 * panels, 4.2), dpi=150, squeeze=False)
+    for method in methods:
+        colour, marker, name = METHOD_STYLE[method]
+        frame = summary[summary.method == method].sort_values("t")
+        axes[0][0].plot(frame.t, frame.tracking_error, color=colour, linewidth=2,
+                        marker=marker, markersize=4, label=name, zorder=3)
+        if confidence:
+            axes[0][1].plot(frame.t, frame.confidence, color=colour, linewidth=2,
+                            marker=marker, markersize=4, label=name, zorder=3)
+    axes[0][0].set_ylim(bottom=0)
+    _style(axes[0][0], "fraction of the journey (t)",
+           f"gap from where it should be ({unit.strip()})",
+           title or f"{variable}: does the readout follow?")
+    axes[0][0].legend(frameon=False, fontsize=9, labelcolor=INK_2, loc="best")
+    if confidence:
+        axes[0][1].axhline(1.0, color=MUTED, linewidth=1, linestyle=(0, (4, 3)), zorder=1)
+        axes[0][1].text(1.0, 1.0, "a real clip ", color=MUTED, fontsize=8, ha="right", va="bottom")
+        axes[0][1].set_ylim(0, 1.15)
+        _style(axes[0][1], "fraction of the journey (t)", "readout confidence",
+               "how much signal is left")
+    fig.tight_layout()
+    return _save(fig, path)
+
+
+def steering_journey_figure(binned: pd.DataFrame, path, variable: str, unit: str,
+                            methods=("linear", "manifold"), title: str | None = None) -> Path:
+    """Part 2, stage 2: the result that matters -- error against how far the clip travelled.
+
+    Averaged over the journey, excluding the endpoints where the methods are identical.
+    A method whose bars stay flat works regardless of distance; one whose bars climb
+    only works for short moves.
+    """
+    frame = (binned[binned.method.isin(methods) & (binned.t > 0.001) & (binned.t < 0.999)]
+             .groupby(["journey_bin", "method"], observed=True).tracking_error.mean().unstack())
+
+    # Read back from CSV the bins are plain strings, so their order is lost. Sort by the
+    # left edge of each interval, and relabel "(-0.001, 45.0]" as the readable "0-45".
+    def edges(interval: str) -> tuple[float, float]:
+        lo, hi = interval.strip("([])").split(",")
+        return float(lo), float(hi)
+
+    frame = frame.loc[sorted(frame.index, key=lambda i: edges(str(i))[0])]
+    # the bin edges carry a small pad from pd.cut; round it away for the label
+    labels = [f"{max(round(edges(str(i))[0], 2), 0):g}–{round(edges(str(i))[1], 2):g}"
+              for i in frame.index]
+    x = np.arange(len(labels))
+    width = 0.8 / len(methods)
+
+    fig, ax = plt.subplots(figsize=(6.8, 4.2), dpi=150)
+    for n, method in enumerate(methods):
+        colour, _, name = METHOD_STYLE[method]
+        ax.bar(x + (n - (len(methods) - 1) / 2) * width, frame[method], width * 0.92,
+               color=colour, label=name, zorder=3)
+        for xi, value in zip(x + (n - (len(methods) - 1) / 2) * width, frame[method]):
+            ax.text(xi, value, f"{value:.2f}", ha="center", va="bottom", fontsize=8, color=INK_2)
+    ax.set_xticks(x)
+    ax.set_xticklabels(labels, fontsize=8)
+    ax.set_ylim(bottom=0)
+    _style(ax, f"how far the clip had to travel ({unit.strip()})",
+           f"gap from where it should be ({unit.strip()})",
+           title or f"{variable}: the gap grows with distance -- for one method")
+    ax.legend(frameon=False, fontsize=9, labelcolor=INK_2, loc="upper left")
+    return _save(fig, path)

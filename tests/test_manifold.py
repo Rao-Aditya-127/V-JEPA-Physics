@@ -8,7 +8,7 @@ import numpy as np
 import pytest
 
 from vjepa_physics.manifold import (
-    Manifold, centroids, choose_smoothing, chord, fit_manifold,
+    Manifold, centroids, choose_smoothing, chord, fit_manifold, short_delta, steering_step,
 )
 
 
@@ -168,3 +168,43 @@ def test_a_diverged_spline_can_never_be_chosen(rng):
     baseline = np.linalg.norm(X[val] - X[fit].mean(0), axis=1).mean()
     chosen = next(r for r in trace if r["smoothing"] == best)
     assert chosen["held_out_error"] < baseline          # never worse than no manifold at all
+
+
+def test_the_two_routes_share_their_endpoints(rng):
+    """The paper's claim rests on this: same start, same finish, different journey.
+    If they differed at t=1 the comparison would be about where they arrive."""
+    X, y, _ = _circle(rng, noise=0.05)
+    m = fit_manifold(X, y, k=4, smoothing=0.0, periodic=True, period=360.0)
+    for t in (0.0, 1.0):
+        lin, v_lin = steering_step(m, X, y, 180.0, t, "linear")
+        man, v_man = steering_step(m, X, y, 180.0, t, "manifold")
+        assert np.abs(lin - man).max() < 1e-9
+        assert np.abs((v_lin - v_man + 180) % 360 - 180).max() < 1e-9
+    mid_lin = steering_step(m, X, y, 180.0, 0.5, "linear")[0]
+    mid_man = steering_step(m, X, y, 180.0, 0.5, "manifold")[0]
+    assert np.abs(mid_lin - mid_man).max() > 0.1          # but they differ in between
+
+
+def test_a_cyclic_path_takes_the_short_way(rng):
+    """350 deg to 10 deg is a 20 deg step forwards, not 340 backwards."""
+    assert short_delta(350.0, 10.0, 360.0) == pytest.approx(20.0)
+    assert short_delta(10.0, 350.0, 360.0) == pytest.approx(-20.0)
+    assert short_delta(1.0, 5.0, None) == pytest.approx(4.0)      # not cyclic: as given
+
+
+def test_manifold_steering_keeps_the_clip_on_its_own_offset(rng):
+    """Steering carries the residual, so a clip's distance from the curve is unchanged
+    -- it moves along the curve rather than being replaced by it."""
+    X, y, _ = _circle(rng, noise=0.4)
+    m = fit_manifold(X, y, k=4, smoothing=1.0, periodic=True, period=360.0)
+    before = np.linalg.norm(X - m.evaluate(y), axis=1)
+    moved, intended = steering_step(m, X, y, 180.0, 0.5, "manifold")
+    after = np.linalg.norm(moved - m.evaluate(intended), axis=1)
+    assert np.allclose(before, after, atol=1e-9)
+
+
+def test_an_unknown_method_is_refused(rng):
+    X, y, _ = _circle(rng)
+    m = fit_manifold(X, y, k=3, smoothing=0.0, periodic=True, period=360.0)
+    with pytest.raises(ValueError, match="unknown steering method"):
+        steering_step(m, X, y, 90.0, 0.5, "geodesic")

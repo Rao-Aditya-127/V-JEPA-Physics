@@ -43,6 +43,43 @@ of the 64 speeds seen in training. Speeds are dealt to folds in sorted order, so
 every fold spans the full 0.25–4.0 m/s range. This matters because R² is measured
 against each fold's own spread of labels.
 
+### The split, in numbers
+
+Each fold divides the 64 speeds three ways. No speed appears in more than one part,
+so the probe trains, is selected, and is scored on entirely disjoint sets of speeds.
+
+| | speeds | clips | what it does |
+|---|---:|---:|---|
+| **fit** | 41 | **984** | the probe's weights are fitted here |
+| **val** | 10 | **240** | picks which of the 20 configurations to keep; never affects any probe's weights |
+| **test** | 13 | **312** | scored once, by one probe, at the end |
+
+(Fold 4 is 42 / 10 / 12 speeds — 1,008 / 240 / 288 clips — because 64 does not divide
+by 5. Every fold sums to all 1,536 clips.)
+
+**Why three parts and not two.** All 20 configurations are trained on the fit clips,
+then compared on the val clips, and only the winner is scored on test. Choosing the
+winner on the test clips instead would report the best of 20 numbers measured on the
+very data being reported — the maximum of 20 noisy estimates rather than an estimate
+of unseen performance. Measured here, that shortcut would have changed nothing at
+layer 8, where one configuration wins on any split, but would have inflated the patch
+embedding from R² 0.054 to 0.070. The guard costs nothing when the signal is strong
+and matters exactly when it is weak.
+
+**Why five folds.** Every speed is judged exactly once across the five, so the whole
+dataset is tested rather than an arbitrary fifth of it — and the spread between folds
+is the error bar. A single split could have reported anywhere from 0.776 to 0.818 for
+direction at layer 0. More importantly, the spread is what distinguishes a real change
+from a wobble: layer 4 → 8 gains 0.018 against a fold-to-fold noise of 0.0025, while
+layer 16 → 18 gains 0.0004 against 0.0017. Without folds, both look like "the curve
+went up a bit".
+
+**What this costs.** 20 configurations × 5 folds = 100 probes per layer, 2,400 for
+speed alone. They are trained in parallel rather than in a loop — weights stacked as
+`(20, 1024, 1)` with Adam vectorised over the configuration axis, 21.8× faster and
+verified in `tests/test_probes.py` to follow exactly the same trajectory as the plain
+implementation.
+
 **Layer numbering.** Paper layer ℓ is the output of block ℓ, which is
 `hidden_states[ℓ + 1]` in HuggingFace; index 0 is the patch embedding. This mapping
 was verified against the model with forward hooks. As in the paper, the x-axis is

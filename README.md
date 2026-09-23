@@ -97,12 +97,14 @@ scripts/                 pipeline: each step writes artifacts
   03_nullspace.py        Part 1.2 iterative nullspace probing (CPU is fine)
   04_steering.py         Part 1.3 multi-probe subspace steering (CPU is fine)
   05_manifold.py         Part 2 fit and evaluate the activation manifold
+  06_manifold_steering.py  Part 2 steer along it, against linear and Part 1.3
   figures/               reporting: read cached results, write figures
     layerwise.py         Part 1.1, all three variables, like the paper's Fig. 2c
     nullspace.py         Part 1.2 curves + the dimensionality table
     figure4c.py          Part 1.2 direction, in the form of the paper's Fig. 4c
     steering.py          Part 1.3 steering curves, like the paper's Fig. 24
     manifold.py          Part 2 the manifold, in 3D and flat, plus its evaluation
+    manifold_steering.py Part 2 the steering comparison
 tests/                   decode, data, folds, probe and nullspace correctness
 artifacts/               features, splits, results, figures   (not tracked)
 data/                    supplied videos and metadata          (not tracked)
@@ -122,12 +124,14 @@ python scripts/02_layerwise_probe.py --variable speed      # Part 1.1, -> artifa
 python scripts/03_nullspace.py --variable speed           # Part 1.2, ~6 min on CPU
 python scripts/04_steering.py --variable speed            # Part 1.3, ~1 min on CPU
 python scripts/05_manifold.py --variable speed            # Part 2,   ~40 s on CPU
+python scripts/06_manifold_steering.py --variable speed   # Part 2,   ~40 s on CPU
 
 python scripts/figures/layerwise.py                       # once all three variables are probed
 python scripts/figures/nullspace.py
 python scripts/figures/figure4c.py
 python scripts/figures/steering.py
 python scripts/figures/manifold.py --variable speed
+python scripts/figures/manifold_steering.py --variable speed
 ```
 
 Extraction is the only step that needs the encoder: roughly 10 s per clip on a
@@ -164,6 +168,5 @@ comparisons, and limitations, serving as the basis for an open discussion.
 
 ## Status
 
-Part 1 is complete for all three variables, with write-ups and figures. Part 2's
-first stage -- fitting and evaluating the activation manifolds -- is complete; the
-steering comparison against Part 1.3 is next.
+Parts 1 and 2 are complete for all three variables, with write-ups and figures.
+Remaining: the ~15 minute presentation.

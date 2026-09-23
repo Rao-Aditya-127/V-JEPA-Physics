@@ -259,3 +259,47 @@ def components_for_variance(X: np.ndarray, y: np.ndarray, fraction: float,
     projected = means @ basis.T
     captured = np.cumsum((projected ** 2).sum(axis=0)) / (means ** 2).sum()
     return int(np.argmax(captured >= fraction) + 1)
+
+
+def short_delta(v0, v1, period: float | None):
+    """How far to travel from v0 to v1, the short way round if the variable is cyclic.
+
+    For direction, 350 deg to 10 deg is +20 deg, not -340. Getting this wrong sends
+    every steering path the long way round the ring, which looks like a failure of
+    the method rather than of the arithmetic.
+    """
+    delta = np.asarray(v1, dtype=np.float64) - np.asarray(v0, dtype=np.float64)
+    if period is None:
+        return delta
+    return (delta + period / 2) % period - period / 2
+
+
+def steering_step(manifold: Manifold, X: np.ndarray, v0, v1, t: float,
+                  method: str = "manifold") -> tuple[np.ndarray, np.ndarray]:
+    """Move each clip a fraction t of the way from its own value to the target.
+
+    Two strategies, differing only in the route (Goodfire eqs. 1 and 2):
+
+        linear      X + t (s(v1) - s(v0))        add the difference vector
+        manifold    X + s(v(t)) - s(v0)          walk along the curve
+
+    Both carry the clip's residual -- whatever separates it from the curve at its own
+    value travels with it -- so the clip keeps its identity and the two methods can be
+    compared without one of them quietly erasing the data.
+
+    They agree exactly at t = 0 and t = 1 and differ only in between, which is the
+    whole of the paper's claim: same endpoints, different journeys.
+
+    Returns the steered activations and the value each is supposed to be at.
+    """
+    period = manifold.period if manifold.periodic else None
+    v0 = np.atleast_1d(np.asarray(v0, dtype=np.float64))
+    delta = short_delta(v0, v1, period)
+    at_origin = manifold.evaluate(v0)
+
+    if method == "linear":
+        return X + t * (manifold.evaluate(v0 + delta) - at_origin), v0 + t * delta
+    if method == "manifold":
+        intended = v0 + t * delta
+        return X + manifold.evaluate(intended) - at_origin, intended
+    raise ValueError(f"unknown steering method {method!r}; expected 'linear' or 'manifold'")
