@@ -645,3 +645,32 @@ def steering_journey_figure(binned: pd.DataFrame, path, variable: str, unit: str
            title or f"{variable}: the gap grows with distance -- for one method")
     ax.legend(frameon=False, fontsize=9, labelcolor=INK_2, loc="upper left")
     return _save(fig, path)
+
+
+def manifold_overview_figure(panels: dict, path: Path,
+                             title: str = "The shape of each physical variable at layer 8") -> Path:
+    """Part 2: all three manifolds side by side, in the plane of their own centroids.
+
+    `panels` maps a variable to (clips, clip_values, centroids, values, curve, unit,
+    periodic), each already projected to its own centroid frame -- the frames differ
+    between variables, so the panels share a shape but not a coordinate system. Only
+    the first two components are drawn: the point is the qualitative difference between
+    a closed ring and an open arc, which the third component only clutters.
+    """
+    fig, axes = plt.subplots(1, len(panels), figsize=(4.4 * len(panels), 4.2), dpi=150)
+    for ax, (variable, (clips, clip_values, points, values, curve, unit, periodic)) in zip(
+            np.atleast_1d(axes), panels.items()):
+        cmap = "twilight" if periodic else "viridis"
+        ax.scatter(clips[:, 0], clips[:, 1], c=clip_values, cmap=cmap, s=3, alpha=0.13,
+                   linewidths=0, zorder=2)
+        ax.plot(curve[:, 0], curve[:, 1], color=INK, linewidth=2.2, zorder=4, alpha=0.85)
+        sc = ax.scatter(points[:, 0], points[:, 1], c=values, cmap=cmap, s=30,
+                        edgecolors=SURFACE, linewidths=0.7, zorder=5)
+        bar = ax.figure.colorbar(sc, ax=ax, fraction=0.045, pad=0.02)
+        bar.ax.tick_params(colors=MUTED, labelcolor=INK_2, labelsize=7)
+        bar.set_label(unit.strip() or variable, color=INK_2, fontsize=8)
+        ax.set_aspect("equal", adjustable="datalim")
+        _manifold_frame(ax, variable, "PC1", "PC2")
+    fig.suptitle(title, color=INK, fontsize=12, fontweight="bold", y=1.02)
+    fig.tight_layout()
+    return _save(fig, path)

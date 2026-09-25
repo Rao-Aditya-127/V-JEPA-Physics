@@ -13,6 +13,11 @@ DATA.md
 # ---------------------------------------------------------------------------
 think/
 
+# The presentation: the deliverable itself, kept out of the repo. Its figures are
+# copies of artifacts/results/figures/ and every number in it is reproducible from
+# results/.
+presentation/
+
 # ---------------------------------------------------------------------------
 # Derived artifacts: cached activations, probes, steering objects, figures.
 # Regenerable from code + supplied data, so they stay out of history.
